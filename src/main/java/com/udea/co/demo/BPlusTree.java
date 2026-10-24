@@ -66,12 +66,15 @@ public class BPlusTree {
         return found;
     }
 
+    // ===================== INSERCIÓN =====================
+
     public InsertResult insert(String name) {
         String key = validateName(name);
+        System.out.println("Insertando \"" + key + "\"...");
         if (root == null) {
             root = new Node(true);
             root.keys.add(key);
-            System.out.println("Inserción normal: se crea la raíz hoja " + root + ".");
+            System.out.println("Árbol vacío: se crea la raíz hoja " + root + ". Sin split.");
             return new InsertResult(true, false);
         }
         InsertState state = new InsertState();
@@ -82,23 +85,29 @@ public class BPlusTree {
             newRoot.children.add(split.left);
             newRoot.children.add(split.right);
             root = newRoot;
-            System.out.println("Split de raíz: nueva raíz " + root + ". Aumenta la altura.");
+            System.out.println("No existía padre: se crea una NUEVA RAÍZ " + root
+                    + ". La altura del árbol aumenta.");
+        }
+        if (state.inserted && !state.hadOverflow) {
+            System.out.println("Resultado: inserción simple, no hubo split.");
         }
         return new InsertResult(state.inserted, state.hadOverflow);
     }
 
     private SplitResult insertRecursive(Node node, String key, InsertState state) {
+        int maxKeys = order - 1;
         if (node.isLeaf) {
             int pos = findPosition(node, key);
             if (pos < node.keys.size() && node.keys.get(pos).equals(key)) {
-                System.out.println("Nombre duplicado en " + node + ". No se inserta.");
+                System.out.println("Nombre duplicado en " + node + ". No se inserta y el árbol no cambia.");
                 return null;
             }
             node.keys.add(pos, key);
             state.inserted = true;
-            System.out.println("Insertar '" + key + "' en hoja: " + node + ".");
-            if (node.keys.size() >= order) {
+            System.out.println("Se agrega '" + key + "' en la hoja: " + node + ".");
+            if (node.keys.size() > maxKeys) {
                 state.hadOverflow = true;
+                System.out.println("La hoja " + node + " superó el máximo de " + maxKeys + " claves.");
                 return splitNode(node);
             }
             return null;
@@ -110,38 +119,46 @@ public class BPlusTree {
             node.keys.add(index, split.promotedKey);
             node.children.set(index, split.left);
             node.children.add(index + 1, split.right);
-            if (node.keys.size() >= order) {
+            System.out.println("La clave '" + split.promotedKey + "' llega al padre: " + node + ".");
+            if (node.keys.size() > maxKeys) {
                 state.hadOverflow = true;
+                System.out.println("El nodo interno " + node + " superó el máximo de "
+                        + maxKeys + " claves: el split SE PROPAGA hacia arriba.");
                 return splitNode(node);
             }
+            System.out.println("El padre tiene espacio: el split NO se propaga más.");
         }
         return null;
     }
 
     private SplitResult splitNode(Node node) {
         int mid = (node.keys.size() - 1) / 2;
-        // Se conserva el nodo izquierdo para no romper el enlace de la hoja anterior.
         Node right = new Node(node.isLeaf);
         String promotedKey;
-        System.out.println("Overflow en " + node + ". Split " + (node.isLeaf ? "de hoja." : "interno."));
+        String before = node.toString();
         if (node.isLeaf) {
             right.keys.addAll(node.keys.subList(mid + 1, node.keys.size()));
             node.keys.subList(mid + 1, node.keys.size()).clear();
             right.next = node.next;
             node.next = right;
             promotedKey = right.keys.get(0);
-            System.out.println("Copiar '" + promotedKey + "' al padre; permanece en la hoja derecha.");
+            System.out.println("SPLIT de hoja: " + before + " -> " + node + " y " + right + ".");
+            System.out.println("La clave '" + promotedKey
+                    + "' se COPIA al padre (también permanece en la hoja derecha).");
         } else {
             promotedKey = node.keys.get(mid);
             right.keys.addAll(node.keys.subList(mid + 1, node.keys.size()));
             right.children.addAll(node.children.subList(mid + 1, node.children.size()));
             node.keys.subList(mid, node.keys.size()).clear();
             node.children.subList(mid + 1, node.children.size()).clear();
-            System.out.println("Promover mediana inferior '" + promotedKey + "' y repartir los hijos.");
+            System.out.println("SPLIT de nodo interno: " + before + " -> " + node + " y " + right + ".");
+            System.out.println("La clave '" + promotedKey
+                    + "' SUBE al padre (se mueve, ya no queda en ninguno de los dos nodos).");
         }
-        System.out.println("Resultado del split: " + node + " y " + right + ".");
         return new SplitResult(promotedKey, node, right);
     }
+
+    // ===================== ELIMINACIÓN =====================
 
     public boolean delete(String name) {
         String key = validateName(name);
@@ -173,7 +190,7 @@ public class BPlusTree {
             node.keys.remove(pos);
             System.out.println("Eliminar '" + key + "' de la hoja: " + node + ".");
             if (node == root || node.keys.size() >= minKeys(node)) {
-                System.out.println("Caso 1: eliminación simple, sin underflow (la raíz tiene mínimo especial).");
+                System.out.println("Caso 1: eliminación simple, sin underflow.");
             }
             return true;
         }
@@ -259,6 +276,8 @@ public class BPlusTree {
             System.out.println("Actualizar separadores: " + previous + " -> " + node + ".");
         }
     }
+
+    // ===================== IMPRESIÓN =====================
 
     public void printByLevels() {
         if (root == null) {
